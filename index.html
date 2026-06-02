@@ -18,10 +18,16 @@
             projectId: "ALLY-SEC-2026-NEXUS-99X" 
         };
 
+        const TRASH_RETENTION_DAYS = 30;
+
         function AllyApp() {
             const [activeTab, setActiveTab] = React.useState('database');
             const [records, setRecords] = React.useState(() => {
                 const saved = localStorage.getItem('allyRecords');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [trash, setTrash] = React.useState(() => {
+                const saved = localStorage.getItem('allyTrash');
                 return saved ? JSON.parse(saved) : [];
             });
             const [filteredRecords, setFilteredRecords] = React.useState(records);
@@ -30,13 +36,29 @@
             const [searchTerm, setSearchTerm] = React.useState('');
             const [filterEmail, setFilterEmail] = React.useState('');
             const [isAdding, setIsAdding] = React.useState(false);
-            const [backupStatus, setBackupStatus] = React.useState('Ready');
+
+            // Auto-clean expired trash
+            React.useEffect(() => {
+                const now = Date.now();
+                const activeTrash = trash.filter(item => {
+                    const expiresAt = item.deletedAt + (TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+                    return expiresAt > now;
+                });
+                if (activeTrash.length !== trash.length) {
+                    setTrash(activeTrash);
+                }
+            }, [trash]);
 
             // Save records to localStorage
             React.useEffect(() => {
                 localStorage.setItem('allyRecords', JSON.stringify(records));
                 filterRecords();
             }, [records]);
+
+            // Save trash to localStorage
+            React.useEffect(() => {
+                localStorage.setItem('allyTrash', JSON.stringify(trash));
+            }, [trash]);
 
             // Filter records
             const filterRecords = () => {
@@ -63,7 +85,6 @@
                 setIsAdding(true);
                 setTimeout(() => {
                     if (editingId) {
-                        // Update existing
                         setRecords(records.map(r => 
                             r.id === editingId 
                                 ? { ...r, ...form, timestamp: new Date().toLocaleString() } 
@@ -71,7 +92,6 @@
                         ));
                         alert('✅ Record updated!');
                     } else {
-                        // Add new
                         const newRecord = { 
                             id: Date.now(), 
                             ...form, 
@@ -93,12 +113,60 @@
                 setActiveTab('database');
             };
 
-            // Delete Record
+            // Move to Trash
             const deleteRecord = (id) => {
-                if (window.confirm('🗑️ Delete this entry? This cannot be undone!')) {
+                const record = records.find(r => r.id === id);
+                if (!record) return;
+
+                if (window.confirm('🗑️ Move to trash? You can recover it within 30 days.')) {
                     setRecords(records.filter(r => r.id !== id));
-                    alert('✅ Deleted!');
+                    setTrash([...trash, {
+                        ...record,
+                        deletedAt: Date.now(),
+                        originalId: id
+                    }]);
+                    alert('✅ Moved to trash! You can recover it in the Trash tab.');
                 }
+            };
+
+            // Recover from Trash
+            const recoverFromTrash = (trashItem) => {
+                if (window.confirm(`♻️ Recover "${trashItem.name}"?`)) {
+                    // Remove from trash
+                    setTrash(trash.filter(t => t.originalId !== trashItem.originalId));
+                    // Add back to records
+                    const recoveredRecord = { ...trashItem };
+                    delete recoveredRecord.deletedAt;
+                    delete recoveredRecord.originalId;
+                    setRecords([...records, recoveredRecord]);
+                    alert('✅ Record recovered!');
+                }
+            };
+
+            // Permanently Delete from Trash
+            const permanentlyDeleteFromTrash = (trashItem) => {
+                if (window.confirm('⚠️ PERMANENTLY delete? This CANNOT be recovered!')) {
+                    setTrash(trash.filter(t => t.originalId !== trashItem.originalId));
+                    alert('🗑️ Permanently deleted!');
+                }
+            };
+
+            // Empty entire trash
+            const emptyTrash = () => {
+                if (window.confirm('🚨 Permanently delete ALL trash items? This CANNOT be undone!')) {
+                    if (window.confirm('⚠️ Are you ABSOLUTELY sure?')) {
+                        setTrash([]);
+                        alert('🗑️ Trash emptied!');
+                    }
+                }
+            };
+
+            // Calculate days until expiration
+            const getDaysUntilExpiration = (deletedAt) => {
+                const expiresAt = deletedAt + (TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+                const now = Date.now();
+                const daysLeft = Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1000));
+                return Math.max(0, daysLeft);
             };
 
             // Export to CSV
@@ -157,14 +225,21 @@
                 event.target.value = '';
             };
 
-            // Clear All
+            // Clear All Active Records
             const clearAll = () => {
-                if (window.confirm('🚨 DELETE ALL RECORDS? This cannot be undone!\n\nPlease backup first!')) {
+                if (window.confirm('🚨 DELETE ALL ACTIVE RECORDS? They will go to trash for 30 days.')) {
                     if (window.confirm('⚠️ Are you ABSOLUTELY sure?')) {
+                        const now = Date.now();
+                        const deletedRecords = records.map(r => ({
+                            ...r,
+                            deletedAt: now,
+                            originalId: r.id
+                        }));
+                        setTrash([...trash, ...deletedRecords]);
                         setRecords([]);
                         setForm({ name: '', email: '', data: '' });
                         setEditingId(null);
-                        alert('✅ All records cleared!');
+                        alert('✅ All records moved to trash! Check the Trash tab to recover or delete permanently.');
                     }
                 }
             };
@@ -181,30 +256,36 @@
                             <div className="flex items-center space-x-3">
                                 <span className="bg-emerald-600 text-white text-xs px-3 py-1 rounded-full font-bold">✅ LOCAL STORAGE</span>
                                 <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold">📦 {records.length}</span>
+                                {trash.length > 0 && <span className="bg-red-600 text-white text-xs px-3 py-1 rounded-full font-bold">🗑️ {trash.length}</span>}
                             </div>
                         </div>
                     </header>
 
                     {/* Navigation Tabs */}
-                    <nav className="bg-gray-800 border-b border-gray-700 p-2 flex justify-center space-x-2 flex-wrap gap-2">
+                    <nav className="bg-gray-800 border-b border-gray-700 p-2 flex justify-center space-x-2 flex-wrap gap-2 overflow-x-auto">
                         <button 
                             onClick={() => setActiveTab('database')}
-                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'database' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            className={`px-4 py-2 rounded-md transition font-bold whitespace-nowrap ${activeTab === 'database' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
                             💾 DATABASE
                         </button>
                         <button 
                             onClick={() => setActiveTab('search')}
-                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'search' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            className={`px-4 py-2 rounded-md transition font-bold whitespace-nowrap ${activeTab === 'search' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
                             🔍 SEARCH
                         </button>
                         <button 
+                            onClick={() => setActiveTab('trash')}
+                            className={`px-4 py-2 rounded-md transition font-bold whitespace-nowrap ${activeTab === 'trash' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            🗑️ TRASH ({trash.length})
+                        </button>
+                        <button 
                             onClick={() => setActiveTab('backup')}
-                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'backup' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            className={`px-4 py-2 rounded-md transition font-bold whitespace-nowrap ${activeTab === 'backup' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
                             💾 BACKUP
                         </button>
                         <button 
                             onClick={() => setActiveTab('info')}
-                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'info' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            className={`px-4 py-2 rounded-md transition font-bold whitespace-nowrap ${activeTab === 'info' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
                             ℹ️ INFO
                         </button>
                     </nav>
@@ -371,6 +452,84 @@
                             </div>
                         )}
 
+                        {/* TRASH TAB */}
+                        {activeTab === 'trash' && (
+                            <div className="space-y-6">
+                                <div className="bg-gray-800 border-2 border-red-600 rounded-xl p-6 shadow-xl">
+                                    <h2 className="text-2xl font-bold text-red-400 mb-6">🗑️ TRASH & RECOVERY</h2>
+                                    
+                                    <div className="bg-red-900 border border-red-600 rounded-lg p-4 mb-6">
+                                        <h3 className="text-red-300 font-bold mb-2">♻️ Recovery System:</h3>
+                                        <ul className="text-red-200 text-sm space-y-1">
+                                            <li>✅ Deleted records are kept for <strong>{TRASH_RETENTION_DAYS} days</strong></li>
+                                            <li>✅ Recover records anytime within the retention period</li>
+                                            <li>✅ After {TRASH_RETENTION_DAYS} days, records are permanently deleted</li>
+                                            <li>✅ You can also manually delete items from trash</li>
+                                        </ul>
+                                    </div>
+
+                                    {trash.length === 0 ? (
+                                        <div className="text-gray-400 text-center py-12">
+                                            <p className="text-3xl mb-2">✨</p>
+                                            <p>Trash is empty! Your deleted records will appear here.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="text-gray-300">Total items in trash: {trash.length}</span>
+                                                <button 
+                                                    onClick={emptyTrash}
+                                                    className="bg-red-600 hover:bg-red-500 text-white font-bold px-4 py-2 rounded-lg transition text-sm">
+                                                    🗑️ EMPTY TRASH
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                                                {trash.map((item, idx) => {
+                                                    const daysLeft = getDaysUntilExpiration(item.deletedAt);
+                                                    const expiryDate = new Date(item.deletedAt + (TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000));
+                                                    return (
+                                                        <div key={item.originalId} className="bg-gray-900 border-2 border-red-700 rounded-lg p-4">
+                                                            <div className="flex justify-between items-start mb-3">
+                                                                <div className="flex-1">
+                                                                    <h3 className="text-red-400 font-bold text-lg">#{idx + 1} {item.name}</h3>
+                                                                    <p className="text-gray-400 text-sm">📧 {item.email}</p>
+                                                                </div>
+                                                                <div className={`text-xs font-bold px-3 py-1 rounded-full ${daysLeft <= 7 ? 'bg-orange-600 text-white' : daysLeft <= 3 ? 'bg-red-600 text-white' : 'bg-yellow-600 text-white'}`}>
+                                                                    ⏳ {daysLeft} days left
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <p className="text-gray-300 text-sm bg-gray-800 p-2 rounded border border-gray-700 mb-3">{item.data}</p>
+                                                            
+                                                            <div className="bg-gray-800 p-2 rounded mb-3 text-xs text-gray-400 border-l-2 border-red-600">
+                                                                🗑️ Deleted: {new Date(item.deletedAt).toLocaleString()}
+                                                                <br/>
+                                                                ⏰ Auto-delete on: {expiryDate.toLocaleString()}
+                                                            </div>
+
+                                                            <div className="flex gap-2">
+                                                                <button 
+                                                                    onClick={() => recoverFromTrash(item)}
+                                                                    className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-2 rounded transition">
+                                                                    ♻️ RECOVER
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => permanentlyDeleteFromTrash(item)}
+                                                                    className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold px-3 py-2 rounded transition">
+                                                                    ❌ DELETE NOW
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* BACKUP TAB */}
                         {activeTab === 'backup' && (
                             <div className="space-y-6">
@@ -423,8 +582,9 @@
                                         <button 
                                             onClick={clearAll}
                                             className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg transition">
-                                            🗑️ DELETE ALL RECORDS (No Recovery!)
+                                            🗑️ DELETE ALL RECORDS (Moves to Trash)
                                         </button>
+                                        <p className="text-red-300 text-xs mt-2">Records will be moved to trash and can be recovered for 30 days</p>
                                     </div>
                                 </div>
                             </div>
@@ -450,7 +610,7 @@
                                         </div>
                                         <div className="flex justify-between py-2">
                                             <span className="text-gray-500">Version:</span>
-                                            <span className="text-purple-400 font-bold">2.0 Ultimate Edition</span>
+                                            <span className="text-purple-400 font-bold">3.0 Ultimate with Trash</span>
                                         </div>
                                     </div>
                                 </div>
@@ -468,7 +628,11 @@
                                         </div>
                                         <div className="bg-gray-900 p-3 rounded border border-gray-700">
                                             <p className="text-emerald-400 font-bold">🗑️ Delete Records</p>
-                                            <p className="text-gray-400 text-sm">Remove unwanted entries</p>
+                                            <p className="text-gray-400 text-sm">Moves to trash (recoverable)</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">♻️ Trash & Recovery</p>
+                                            <p className="text-gray-400 text-sm">Recover deleted items for 30 days</p>
                                         </div>
                                         <div className="bg-gray-900 p-3 rounded border border-gray-700">
                                             <p className="text-emerald-400 font-bold">🔍 Search & Filter</p>
@@ -484,11 +648,7 @@
                                         </div>
                                         <div className="bg-gray-900 p-3 rounded border border-gray-700">
                                             <p className="text-emerald-400 font-bold">💾 Local Storage</p>
-                                            <p className="text-gray-400 text-sm">No cloud needed</p>
-                                        </div>
-                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
-                                            <p className="text-emerald-400 font-bold">📱 Responsive</p>
-                                            <p className="text-gray-400 text-sm">Works on all devices</p>
+                                            <p className="text-gray-400 text-sm">100% private & secure</p>
                                         </div>
                                     </div>
                                 </div>
@@ -499,11 +659,11 @@
                                         <li>Go to <strong>💾 DATABASE</strong> tab</li>
                                         <li>Fill in Name, Email, and Data fields</li>
                                         <li>Click <strong>✅ ADD RECORD</strong></li>
-                                        <li>View all records below</li>
-                                        <li>Use <strong>🔍 SEARCH</strong> to find specific records</li>
                                         <li>Use <strong>✏️ EDIT</strong> to update records</li>
-                                        <li>Use <strong>🗑️ DELETE</strong> to remove records</li>
-                                        <li>Go to <strong>💾 BACKUP</strong> to export/import data</li>
+                                        <li>Use <strong>🗑️ DELETE</strong> to move records to trash</li>
+                                        <li>Check <strong>🗑️ TRASH</strong> tab to recover deleted items</li>
+                                        <li>Use <strong>🔍 SEARCH</strong> to find specific records</li>
+                                        <li>Use <strong>💾 BACKUP</strong> to export/import data</li>
                                     </ol>
                                 </div>
                             </div>
@@ -512,7 +672,7 @@
 
                     {/* Footer */}
                     <footer className="bg-gray-800 border-t border-gray-700 p-4 text-center text-gray-500 text-xs mt-auto">
-                        <p>Ally Ultimate Edition • {CREATOR.name} © 2026 • Local Storage Database • No Cloud Required</p>
+                        <p>Ally Ultimate Edition v3.0 • {CREATOR.name} © 2026 • Local Storage Database with 30-Day Trash Recovery • No Cloud Required</p>
                     </footer>
                 </div>
             );
