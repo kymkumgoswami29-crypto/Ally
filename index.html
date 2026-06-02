@@ -8,119 +8,37 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
     <div id="root"></div>
     <script type="text/babel">
-        const CREATOR = { name: "Kumkum Goswami", role: "Lead Systems Architect", projectId: "ALLY-SEC-2026-NEXUS-99X" };
-
-        // Firebase Config
-        const FIREBASE_CONFIG = {
-            apiKey: localStorage.getItem('fb_apiKey') || "",
-            authDomain: localStorage.getItem('fb_authDomain') || "",
-            databaseURL: localStorage.getItem('fb_databaseURL') || "",
-            projectId: localStorage.getItem('fb_projectId') || ""
+        const CREATOR = { 
+            name: "Kumkum Goswami", 
+            role: "Lead Systems Architect", 
+            projectId: "ALLY-SEC-2026-NEXUS-99X" 
         };
 
-        let db = null, auth = null, firebaseReady = false;
-
-        try {
-            if (FIREBASE_CONFIG.apiKey) {
-                firebase.initializeApp(FIREBASE_CONFIG);
-                db = firebase.database();
-                auth = firebase.auth();
-                firebaseReady = true;
-            }
-        } catch (e) {
-            console.log("Firebase not configured");
-        }
-
-        function FirebaseSetup() {
-            const [config, setConfig] = React.useState(FIREBASE_CONFIG);
-            const [saved, setSaved] = React.useState(false);
-
-            const saveConfig = () => {
-                localStorage.setItem('fb_apiKey', config.apiKey);
-                localStorage.setItem('fb_authDomain', config.authDomain);
-                localStorage.setItem('fb_databaseURL', config.databaseURL);
-                localStorage.setItem('fb_projectId', config.projectId);
-                setSaved(true);
-                setTimeout(() => window.location.reload(), 2000);
-            };
-
-            return (
-                <div className="min-h-screen bg-gray-900 p-4 flex items-center justify-center">
-                    <div className="bg-gray-800 border border-emerald-600 rounded-xl p-8 max-w-2xl w-full">
-                        <h1 className="text-3xl font-bold text-emerald-400 mb-6">🔥 ALLY FIREBASE SETUP</h1>
-                        
-                        <div className="bg-gray-900 p-4 rounded-lg mb-6 border border-yellow-600">
-                            <h3 className="text-yellow-400 font-bold mb-3">⚡ QUICK SETUP (2 mins):</h3>
-                            <ol className="text-gray-300 text-sm space-y-2 list-decimal list-inside">
-                                <li>Go to <strong>firebase.google.com</strong></li>
-                                <li>Create project: <strong>ally-database</strong></li>
-                                <li>Create Realtime Database (test mode)</li>
-                                <li>Go to Settings → Project Settings</li>
-                                <li>Copy config and paste below</li>
-                            </ol>
-                        </div>
-
-                        <div className="space-y-3 mb-6">
-                            <input type="text" placeholder="API Key" value={config.apiKey} onChange={(e) => setConfig({...config, apiKey: e.target.value})} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none text-sm" />
-                            <input type="text" placeholder="Auth Domain" value={config.authDomain} onChange={(e) => setConfig({...config, authDomain: e.target.value})} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none text-sm" />
-                            <input type="text" placeholder="Database URL" value={config.databaseURL} onChange={(e) => setConfig({...config, databaseURL: e.target.value})} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none text-sm" />
-                            <input type="text" placeholder="Project ID" value={config.projectId} onChange={(e) => setConfig({...config, projectId: e.target.value})} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none text-sm" />
-                        </div>
-
-                        {saved && <p className="text-emerald-400 font-bold mb-4">✅ Saved! Reloading...</p>}
-                        <button onClick={saveConfig} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition">✅ SAVE & ACTIVATE</button>
-                    </div>
-                </div>
-            );
-        }
-
         function AllyApp() {
-            const [user, setUser] = React.useState(null);
-            const [authMode, setAuthMode] = React.useState('login');
-            const [authEmail, setAuthEmail] = React.useState('');
-            const [authPassword, setAuthPassword] = React.useState('');
             const [activeTab, setActiveTab] = React.useState('database');
-            const [records, setRecords] = React.useState(() => JSON.parse(localStorage.getItem('allyRecords') || '[]'));
+            const [records, setRecords] = React.useState(() => {
+                const saved = localStorage.getItem('allyRecords');
+                return saved ? JSON.parse(saved) : [];
+            });
             const [filteredRecords, setFilteredRecords] = React.useState(records);
             const [form, setForm] = React.useState({ name: '', email: '', data: '' });
             const [editingId, setEditingId] = React.useState(null);
             const [searchTerm, setSearchTerm] = React.useState('');
             const [filterEmail, setFilterEmail] = React.useState('');
             const [isAdding, setIsAdding] = React.useState(false);
-            const [syncStatus, setSyncStatus] = React.useState('OFFLINE');
-            const [cloudRecords, setCloudRecords] = React.useState([]);
+            const [backupStatus, setBackupStatus] = React.useState('Ready');
 
+            // Save records to localStorage
             React.useEffect(() => {
                 localStorage.setItem('allyRecords', JSON.stringify(records));
                 filterRecords();
             }, [records]);
 
-            React.useEffect(() => {
-                if (firebaseReady && user) {
-                    const dbRef = firebase.database().ref('users/' + user.uid + '/records');
-                    dbRef.on('value', (snapshot) => {
-                        const data = [];
-                        snapshot.forEach((child) => data.push({ id: child.key, ...child.val() }));
-                        setCloudRecords(data);
-                        setSyncStatus('SYNCED ✅');
-                    });
-                    return () => dbRef.off();
-                }
-            }, [user]);
-
-            React.useEffect(() => {
-                if (firebaseReady && auth) {
-                    auth.onAuthStateChanged((currentUser) => setUser(currentUser));
-                }
-            }, []);
-
+            // Filter records
             const filterRecords = () => {
                 let filtered = records.filter(r => 
                     (r.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -135,22 +53,7 @@
                 filterRecords();
             }, [searchTerm, filterEmail, records]);
 
-            const handleAuth = async () => {
-                try {
-                    if (authMode === 'login') {
-                        await auth.signInWithEmailAndPassword(authEmail, authPassword);
-                        setSyncStatus('SYNCING...');
-                    } else {
-                        await auth.createUserWithEmailAndPassword(authEmail, authPassword);
-                        setSyncStatus('SYNCING...');
-                    }
-                    setAuthEmail('');
-                    setAuthPassword('');
-                } catch (error) {
-                    alert('❌ ' + error.message);
-                }
-            };
-
+            // Add or Update Record
             const addOrUpdateRecord = () => {
                 if (!form.name || !form.email || !form.data) {
                     alert('⚠️ Fill all fields!');
@@ -160,148 +63,305 @@
                 setIsAdding(true);
                 setTimeout(() => {
                     if (editingId) {
-                        setRecords(records.map(r => r.id === editingId ? { ...r, ...form, timestamp: new Date().toLocaleString() } : r));
-                        setEditingId(null);
-                        
-                        if (firebaseReady && user) {
-                            firebase.database().ref('users/' + user.uid + '/records/' + editingId).set({ ...form, timestamp: new Date().toLocaleString() });
-                        }
+                        // Update existing
+                        setRecords(records.map(r => 
+                            r.id === editingId 
+                                ? { ...r, ...form, timestamp: new Date().toLocaleString() } 
+                                : r
+                        ));
+                        alert('✅ Record updated!');
                     } else {
-                        const newRecord = { id: Date.now(), ...form, timestamp: new Date().toLocaleString() };
+                        // Add new
+                        const newRecord = { 
+                            id: Date.now(), 
+                            ...form, 
+                            timestamp: new Date().toLocaleString() 
+                        };
                         setRecords([...records, newRecord]);
-                        
-                        if (firebaseReady && user) {
-                            firebase.database().ref('users/' + user.uid + '/records/' + newRecord.id).set(newRecord);
-                        }
+                        alert('✅ Record added!');
                     }
                     setForm({ name: '', email: '', data: '' });
+                    setEditingId(null);
                     setIsAdding(false);
-                    alert(editingId ? '✅ Updated!' : '✅ Added!');
                 }, 500);
             };
 
+            // Edit Record
             const editRecord = (record) => {
                 setForm(record);
                 setEditingId(record.id);
+                setActiveTab('database');
             };
 
+            // Delete Record
             const deleteRecord = (id) => {
-                if (window.confirm('Delete this entry?')) {
+                if (window.confirm('🗑️ Delete this entry? This cannot be undone!')) {
                     setRecords(records.filter(r => r.id !== id));
-                    if (firebaseReady && user) {
-                        firebase.database().ref('users/' + user.uid + '/records/' + id).remove();
-                    }
                     alert('✅ Deleted!');
                 }
             };
 
+            // Export to CSV
             const exportCSV = () => {
                 let csv = 'Name,Email,Data,Timestamp\n';
-                records.forEach(r => csv += `"${r.name}","${r.email}","${r.data}","${r.timestamp}"\n`);
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'ally_records.csv';
-                a.click();
-                alert('✅ Exported!');
-            };
-
-            const syncToCloud = () => {
-                if (!firebaseReady || !user) {
-                    alert('❌ Firebase not configured or not logged in');
-                    return;
-                }
-                setSyncStatus('SYNCING...');
                 records.forEach(r => {
-                    firebase.database().ref('users/' + user.uid + '/records/' + r.id).set(r);
+                    csv += `"${r.name}","${r.email}","${r.data.replace(/"/g, '""')}","${r.timestamp}"\n`;
                 });
-                setTimeout(() => setSyncStatus('SYNCED ✅'), 1000);
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'ally_backup_' + new Date().toISOString().split('T')[0] + '.csv';
+                link.click();
+                alert('✅ Exported to CSV!');
             };
 
-            // Auth UI
-            if (!firebaseReady) {
-                return <FirebaseSetup />;
-            }
+            // Export to JSON
+            const exportJSON = () => {
+                const backup = {
+                    version: 1,
+                    exported: new Date().toISOString(),
+                    creator: CREATOR.name,
+                    records: records
+                };
+                const json = JSON.stringify(backup, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'ally_backup_' + new Date().toISOString().split('T')[0] + '.json';
+                link.click();
+                alert('✅ Exported to JSON!');
+            };
 
-            if (!user) {
-                return (
-                    <div className="min-h-screen bg-gray-900 p-4 flex items-center justify-center">
-                        <div className="bg-gray-800 border border-emerald-600 rounded-xl p-8 max-w-md w-full">
-                            <h1 className="text-3xl font-bold text-emerald-400 mb-6">🔐 ALLY AUTH</h1>
-                            <div className="space-y-4">
-                                <input type="email" placeholder="Email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                <input type="password" placeholder="Password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                <button onClick={handleAuth} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded transition">{authMode === 'login' ? '🔓 LOGIN' : '✍️ REGISTER'}</button>
-                                <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="w-full bg-gray-700 hover:bg-gray-600 text-gray-300 py-2 rounded transition">{authMode === 'login' ? 'Need account? Register' : 'Already have account? Login'}</button>
-                            </div>
-                        </div>
-                    </div>
-                );
-            }
+            // Import from JSON
+            const importJSON = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
 
-            // Main App
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const backup = JSON.parse(e.target.result);
+                        if (backup.records && Array.isArray(backup.records)) {
+                            if (window.confirm(`📥 Import ${backup.records.length} records? This will ADD to existing records.`)) {
+                                setRecords([...records, ...backup.records]);
+                                alert('✅ Imported successfully!');
+                            }
+                        } else {
+                            alert('❌ Invalid backup file format!');
+                        }
+                    } catch (error) {
+                        alert('❌ Error reading file: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            // Clear All
+            const clearAll = () => {
+                if (window.confirm('🚨 DELETE ALL RECORDS? This cannot be undone!\n\nPlease backup first!')) {
+                    if (window.confirm('⚠️ Are you ABSOLUTELY sure?')) {
+                        setRecords([]);
+                        setForm({ name: '', email: '', data: '' });
+                        setEditingId(null);
+                        alert('✅ All records cleared!');
+                    }
+                }
+            };
+
             return (
                 <div className="flex flex-col min-h-screen">
-                    <header className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-50">
+                    {/* Header */}
+                    <header className="bg-gray-800 border-b border-gray-700 p-4 sticky top-0 z-50 shadow-lg">
                         <div className="container mx-auto flex justify-between items-center">
-                            <h1 className="text-2xl font-bold text-emerald-400">⚡ ALLY ULTIMATE</h1>
-                            <div className="flex items-center space-x-4">
-                                <span className={`text-xs px-3 py-1 rounded-full font-bold ${syncStatus.includes('✅') ? 'bg-emerald-600 text-white' : 'bg-yellow-600 text-white'}`}>{syncStatus}</span>
-                                <button onClick={() => auth.signOut()} className="bg-red-600 hover:bg-red-500 text-white text-xs px-3 py-1 rounded transition">🚪 LOGOUT</button>
+                            <div className="flex items-center space-x-3">
+                                <span className="text-3xl">⚡</span>
+                                <h1 className="text-2xl font-bold text-emerald-400">ALLY ULTIMATE</h1>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                                <span className="bg-emerald-600 text-white text-xs px-3 py-1 rounded-full font-bold">✅ LOCAL STORAGE</span>
+                                <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold">📦 {records.length}</span>
                             </div>
                         </div>
                     </header>
 
-                    <nav className="bg-gray-800 border-b border-gray-700 flex justify-center space-x-2 p-2 flex-wrap">
-                        <button onClick={() => setActiveTab('database')} className={`px-4 py-2 rounded-md transition ${activeTab === 'database' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}>💾 DATABASE</button>
-                        <button onClick={() => setActiveTab('search')} className={`px-4 py-2 rounded-md transition ${activeTab === 'search' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}>🔍 SEARCH</button>
-                        <button onClick={() => setActiveTab('cloud')} className={`px-4 py-2 rounded-md transition ${activeTab === 'cloud' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}>☁️ CLOUD</button>
-                        <button onClick={() => setActiveTab('info')} className={`px-4 py-2 rounded-md transition ${activeTab === 'info' ? 'bg-emerald-600 text-white font-bold' : 'text-gray-400 hover:text-white'}`}>ℹ️ INFO</button>
+                    {/* Navigation Tabs */}
+                    <nav className="bg-gray-800 border-b border-gray-700 p-2 flex justify-center space-x-2 flex-wrap gap-2">
+                        <button 
+                            onClick={() => setActiveTab('database')}
+                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'database' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            💾 DATABASE
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('search')}
+                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'search' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            🔍 SEARCH
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('backup')}
+                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'backup' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            💾 BACKUP
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('info')}
+                            className={`px-4 py-2 rounded-md transition font-bold ${activeTab === 'info' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-300 hover:text-white'}`}>
+                            ℹ️ INFO
+                        </button>
                     </nav>
 
-                    <main className="flex-grow container mx-auto p-4 max-w-6xl">
+                    {/* Main Content */}
+                    <main className="flex-grow container mx-auto p-4 max-w-6xl w-full">
+                        {/* DATABASE TAB */}
                         {activeTab === 'database' && (
                             <div className="space-y-6">
-                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                                    <h2 className="text-xl font-bold text-emerald-300 mb-4">{editingId ? '✏️ EDIT ENTRY' : '➕ ADD NEW ENTRY'}</h2>
-                                    <div className="space-y-3">
-                                        <input type="text" placeholder="Full Name" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                        <input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                        <textarea placeholder="Data / Notes" value={form.data} onChange={(e) => setForm({...form, data: e.target.value})} rows="3" className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                        <div className="flex gap-2">
-                                            <button onClick={addOrUpdateRecord} disabled={isAdding} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition disabled:opacity-50">{isAdding ? '⏳...' : (editingId ? '✏️ UPDATE' : '✅ ADD')}</button>
-                                            {editingId && <button onClick={() => {setEditingId(null); setForm({name: '', email: '', data: ''});}} className="flex-1 bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 rounded-lg transition">❌ CANCEL</button>}
+                                {/* Add/Edit Form */}
+                                <div className="bg-gray-800 border-2 border-emerald-600 rounded-xl p-6 shadow-xl">
+                                    <h2 className="text-2xl font-bold text-emerald-300 mb-6">
+                                        {editingId ? '✏️ EDIT ENTRY' : '➕ ADD NEW ENTRY'}
+                                    </h2>
+                                    <div className="space-y-4">
+                                        <input 
+                                            type="text"
+                                            placeholder="Full Name"
+                                            value={form.name}
+                                            onChange={(e) => setForm({...form, name: e.target.value})}
+                                            className="w-full bg-gray-900 border-2 border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none transition"
+                                        />
+                                        <input 
+                                            type="email"
+                                            placeholder="Email Address"
+                                            value={form.email}
+                                            onChange={(e) => setForm({...form, email: e.target.value})}
+                                            className="w-full bg-gray-900 border-2 border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none transition"
+                                        />
+                                        <textarea 
+                                            placeholder="Data / Notes / Information"
+                                            value={form.data}
+                                            onChange={(e) => setForm({...form, data: e.target.value})}
+                                            rows="4"
+                                            className="w-full bg-gray-900 border-2 border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none transition resize-none"
+                                        />
+                                        <div className="flex gap-3">
+                                            <button 
+                                                onClick={addOrUpdateRecord}
+                                                disabled={isAdding}
+                                                className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-lg transition shadow-lg">
+                                                {isAdding ? '⏳ Processing...' : (editingId ? '✏️ UPDATE RECORD' : '✅ ADD RECORD')}
+                                            </button>
+                                            {editingId && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setEditingId(null);
+                                                        setForm({name: '', email: '', data: ''});
+                                                    }}
+                                                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg transition">
+                                                    ❌ CANCEL
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                                    <div className="flex justify-between items-center mb-4">
-                                        <h2 className="text-xl font-bold text-emerald-300">📋 RECORDS ({records.length})</h2>
-                                        <div className="space-x-2">
-                                            <button onClick={exportCSV} className="bg-green-600 hover:bg-green-500 text-white text-sm px-4 py-2 rounded-lg transition">📥 EXPORT</button>
-                                            <button onClick={syncToCloud} className="bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2 rounded-lg transition">☁️ SYNC</button>
-                                        </div>
+                                {/* Records List */}
+                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h2 className="text-2xl font-bold text-emerald-300">📋 ALL RECORDS ({records.length})</h2>
+                                        <button 
+                                            onClick={exportCSV}
+                                            className="bg-green-600 hover:bg-green-500 text-white font-bold px-4 py-2 rounded-lg transition">
+                                            📥 EXPORT CSV
+                                        </button>
                                     </div>
                                     
                                     {records.length === 0 ? (
-                                        <p className="text-gray-400 text-center py-12">📭 No records!</p>
+                                        <div className="text-gray-400 text-center py-16">
+                                            <p className="text-3xl mb-2">📭</p>
+                                            <p>No records yet! Add your first entry above.</p>
+                                        </div>
                                     ) : (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                                             {records.map((record, idx) => (
-                                                <div key={record.id} className="bg-gray-900 border border-gray-700 rounded-lg p-4 hover:border-emerald-600 transition">
-                                                    <div className="flex justify-between items-start mb-2">
+                                                <div key={record.id} className="bg-gray-900 border border-gray-700 rounded-lg p-4 hover:border-emerald-500 transition">
+                                                    <div className="flex justify-between items-start mb-3">
                                                         <div className="flex-1">
-                                                            <h3 className="text-emerald-400 font-bold">#{idx + 1} {record.name}</h3>
-                                                            <p className="text-gray-400 text-sm">{record.email}</p>
-                                                            <p className="text-gray-300 text-sm mt-2 bg-gray-800 p-2 rounded">{record.data}</p>
-                                                            <p className="text-gray-500 text-xs mt-2">⏰ {record.timestamp}</p>
+                                                            <h3 className="text-emerald-400 font-bold text-lg">#{idx + 1} {record.name}</h3>
+                                                            <p className="text-gray-400 text-sm">📧 {record.email}</p>
                                                         </div>
-                                                        <div className="space-x-2 ml-2">
-                                                            <button onClick={() => editRecord(record)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs px-2 py-1 rounded transition">✏️ EDIT</button>
-                                                            <button onClick={() => deleteRecord(record.id)} className="bg-red-600 hover:bg-red-500 text-white text-xs px-2 py-1 rounded transition">🗑️ DEL</button>
+                                                        <div className="flex gap-2 ml-2">
+                                                            <button 
+                                                                onClick={() => editRecord(record)}
+                                                                className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded transition">
+                                                                ✏️ EDIT
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => deleteRecord(record.id)}
+                                                                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1 rounded transition">
+                                                                🗑️ DELETE
+                                                            </button>
                                                         </div>
+                                                    </div>
+                                                    <p className="text-gray-300 text-sm bg-gray-800 p-3 rounded border border-gray-700 mb-2">{record.data}</p>
+                                                    <p className="text-gray-500 text-xs">⏰ {record.timestamp}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* SEARCH TAB */}
+                        {activeTab === 'search' && (
+                            <div className="space-y-6">
+                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
+                                    <h2 className="text-2xl font-bold text-emerald-300 mb-6">🔍 SEARCH & FILTER</h2>
+                                    
+                                    <div className="space-y-4 mb-6">
+                                        <input 
+                                            type="text"
+                                            placeholder="Search by name, email, or data..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="w-full bg-gray-900 border-2 border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none transition"
+                                        />
+                                        <input 
+                                            type="email"
+                                            placeholder="Filter by email..."
+                                            value={filterEmail}
+                                            onChange={(e) => setFilterEmail(e.target.value)}
+                                            className="w-full bg-gray-900 border-2 border-gray-700 rounded-lg px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-emerald-500 focus:outline-none transition"
+                                        />
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <h3 className="text-emerald-400 font-bold text-lg">
+                                            🎯 Results: {filteredRecords.length} of {records.length} found
+                                        </h3>
+                                    </div>
+
+                                    {filteredRecords.length === 0 ? (
+                                        <div className="text-gray-400 text-center py-12">
+                                            <p className="text-2xl mb-2">🔎</p>
+                                            <p>No matching records found.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                                            {filteredRecords.map((record, idx) => (
+                                                <div key={record.id} className="bg-gray-900 border border-gray-700 rounded-lg p-4 hover:border-emerald-500 transition">
+                                                    <h3 className="text-emerald-400 font-bold">{record.name}</h3>
+                                                    <p className="text-gray-400 text-sm mb-2">{record.email}</p>
+                                                    <p className="text-gray-300 text-sm bg-gray-800 p-2 rounded">{record.data}</p>
+                                                    <div className="flex gap-2 mt-3">
+                                                        <button 
+                                                            onClick={() => editRecord(record)}
+                                                            className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded transition">
+                                                            ✏️ EDIT
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => deleteRecord(record.id)}
+                                                            className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-3 py-1 rounded transition">
+                                                            🗑️ DELETE
+                                                        </button>
                                                     </div>
                                                 </div>
                                             ))}
@@ -311,93 +371,155 @@
                             </div>
                         )}
 
-                        {activeTab === 'search' && (
+                        {/* BACKUP TAB */}
+                        {activeTab === 'backup' && (
                             <div className="space-y-6">
-                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                                    <h2 className="text-xl font-bold text-emerald-300 mb-4">🔍 SEARCH & FILTER</h2>
-                                    <div className="space-y-3 mb-6">
-                                        <input type="text" placeholder="Search by name, email or data..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
-                                        <input type="email" placeholder="Filter by email..." value={filterEmail} onChange={(e) => setFilterEmail(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:border-emerald-500 focus:outline-none" />
+                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
+                                    <h2 className="text-2xl font-bold text-emerald-300 mb-6">💾 BACKUP & RESTORE</h2>
+                                    
+                                    <div className="bg-blue-900 border border-blue-600 rounded-lg p-4 mb-6">
+                                        <h3 className="text-blue-300 font-bold mb-2">💡 How it works:</h3>
+                                        <ul className="text-blue-200 text-sm space-y-1">
+                                            <li>✅ Export your data as CSV or JSON file</li>
+                                            <li>✅ Download to your computer</li>
+                                            <li>✅ Import anytime to restore or merge</li>
+                                            <li>✅ 100% local, no cloud needed</li>
+                                        </ul>
                                     </div>
 
-                                    <h3 className="text-emerald-400 font-bold mb-3">Results: {filteredRecords.length} found</h3>
-                                    {filteredRecords.length === 0 ? (
-                                        <p className="text-gray-400 text-center py-12">🔎 No results found</p>
-                                    ) : (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                                            {filteredRecords.map((record) => (
-                                                <div key={record.id} className="bg-gray-900 border border-gray-700 rounded-lg p-4">
-                                                    <h3 className="text-emerald-400 font-bold">{record.name}</h3>
-                                                    <p className="text-gray-400 text-sm">{record.email}</p>
-                                                    <p className="text-gray-300 text-sm mt-2">{record.data}</p>
-                                                </div>
-                                            ))}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                        <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+                                            <h3 className="text-emerald-300 font-bold mb-4">📥 EXPORT DATA</h3>
+                                            <p className="text-gray-400 text-sm mb-4">Current records: {records.length}</p>
+                                            <button 
+                                                onClick={exportJSON}
+                                                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded-lg transition mb-2">
+                                                📤 Export as JSON
+                                            </button>
+                                            <button 
+                                                onClick={exportCSV}
+                                                className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded-lg transition">
+                                                📊 Export as CSV
+                                            </button>
                                         </div>
-                                    )}
+
+                                        <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
+                                            <h3 className="text-emerald-300 font-bold mb-4">📤 IMPORT DATA</h3>
+                                            <label className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg transition text-center cursor-pointer block">
+                                                📥 Import JSON File
+                                                <input 
+                                                    type="file"
+                                                    accept=".json"
+                                                    onChange={importJSON}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                            <p className="text-gray-400 text-xs mt-4">Select a JSON backup file to restore or merge records</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-red-900 border border-red-600 rounded-lg p-4">
+                                        <h3 className="text-red-300 font-bold mb-2">⚠️ DANGER ZONE</h3>
+                                        <button 
+                                            onClick={clearAll}
+                                            className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg transition">
+                                            🗑️ DELETE ALL RECORDS (No Recovery!)
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
 
-                        {activeTab === 'cloud' && (
-                            <div className="space-y-6">
-                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                                    <h2 className="text-xl font-bold text-emerald-300 mb-4">☁️ CLOUD SYNC</h2>
-                                    <p className="text-gray-400 mb-4">Local Records: {records.length} | Cloud Records: {cloudRecords.length}</p>
-                                    <button onClick={syncToCloud} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-lg transition mb-6">☁️ SYNC ALL TO CLOUD</button>
-
-                                    <h3 className="text-emerald-400 font-bold mb-3">Cloud Backup:</h3>
-                                    {cloudRecords.length === 0 ? (
-                                        <p className="text-gray-400">No cloud records yet. Click sync button above!</p>
-                                    ) : (
-                                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                                            {cloudRecords.map((record) => (
-                                                <div key={record.id} className="bg-gray-900 border border-emerald-700 rounded-lg p-4">
-                                                    <h3 className="text-emerald-400 font-bold">{record.name}</h3>
-                                                    <p className="text-gray-400 text-sm">{record.email}</p>
-                                                    <p className="text-gray-300 text-sm mt-2">{record.data}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
+                        {/* INFO TAB */}
                         {activeTab === 'info' && (
                             <div className="space-y-6">
-                                <div className="bg-gray-800 border border-emerald-600 rounded-xl p-6">
-                                    <h2 className="text-2xl font-bold text-emerald-300 mb-4">✨ ALLY ULTIMATE</h2>
+                                <div className="bg-gray-800 border-2 border-emerald-600 rounded-xl p-6 shadow-xl">
+                                    <h2 className="text-2xl font-bold text-emerald-300 mb-4">✨ ABOUT ALLY ULTIMATE</h2>
                                     <div className="space-y-3 text-gray-300">
-                                        <p><span className="text-gray-500">Creator:</span> {CREATOR.name}</p>
-                                        <p><span className="text-gray-500">Role:</span> {CREATOR.role}</p>
-                                        <p><span className="text-gray-500">Project ID:</span> {CREATOR.projectId}</p>
-                                        <p><span className="text-gray-500">User:</span> {user.email}</p>
+                                        <div className="flex justify-between py-2 border-b border-gray-700">
+                                            <span className="text-gray-500">Creator:</span>
+                                            <span className="text-emerald-400 font-bold">{CREATOR.name}</span>
+                                        </div>
+                                        <div className="flex justify-between py-2 border-b border-gray-700">
+                                            <span className="text-gray-500">Role:</span>
+                                            <span className="text-blue-400 font-bold">{CREATOR.role}</span>
+                                        </div>
+                                        <div className="flex justify-between py-2 border-b border-gray-700">
+                                            <span className="text-gray-500">Project ID:</span>
+                                            <span className="text-yellow-400 font-mono text-sm">{CREATOR.projectId}</span>
+                                        </div>
+                                        <div className="flex justify-between py-2">
+                                            <span className="text-gray-500">Version:</span>
+                                            <span className="text-purple-400 font-bold">2.0 Ultimate Edition</span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
                                     <h3 className="text-xl font-bold text-emerald-300 mb-4">🚀 FEATURES</h3>
-                                    <ul className="space-y-2 text-gray-300">
-                                        <li>✅ Add, Edit & Delete Records</li>
-                                        <li>✅ Advanced Search & Filter</li>
-                                        <li>✅ Cloud Sync (Firebase)</li>
-                                        <li>✅ User Authentication</li>
-                                        <li>✅ Export to CSV</li>
-                                        <li>✅ Real-time Updates</li>
-                                        <li>✅ Offline Access</li>
-                                    </ul>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">✅ Add Records</p>
+                                            <p className="text-gray-400 text-sm">Create new database entries</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">✏️ Edit Records</p>
+                                            <p className="text-gray-400 text-sm">Update existing entries</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">🗑️ Delete Records</p>
+                                            <p className="text-gray-400 text-sm">Remove unwanted entries</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">🔍 Search & Filter</p>
+                                            <p className="text-gray-400 text-sm">Find records instantly</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">📥 Export Data</p>
+                                            <p className="text-gray-400 text-sm">CSV & JSON backup</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">📤 Import Data</p>
+                                            <p className="text-gray-400 text-sm">Restore from backup</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">💾 Local Storage</p>
+                                            <p className="text-gray-400 text-sm">No cloud needed</p>
+                                        </div>
+                                        <div className="bg-gray-900 p-3 rounded border border-gray-700">
+                                            <p className="text-emerald-400 font-bold">📱 Responsive</p>
+                                            <p className="text-gray-400 text-sm">Works on all devices</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 shadow-xl">
+                                    <h3 className="text-xl font-bold text-emerald-300 mb-4">📚 HOW TO USE</h3>
+                                    <ol className="text-gray-300 space-y-2 list-decimal list-inside">
+                                        <li>Go to <strong>💾 DATABASE</strong> tab</li>
+                                        <li>Fill in Name, Email, and Data fields</li>
+                                        <li>Click <strong>✅ ADD RECORD</strong></li>
+                                        <li>View all records below</li>
+                                        <li>Use <strong>🔍 SEARCH</strong> to find specific records</li>
+                                        <li>Use <strong>✏️ EDIT</strong> to update records</li>
+                                        <li>Use <strong>🗑️ DELETE</strong> to remove records</li>
+                                        <li>Go to <strong>💾 BACKUP</strong> to export/import data</li>
+                                    </ol>
                                 </div>
                             </div>
                         )}
                     </main>
 
-                    <footer className="bg-gray-800 border-t border-gray-700 p-4 text-center text-gray-500 text-xs">Ally Ultimate Edition • {CREATOR.name} © 2026</footer>
+                    {/* Footer */}
+                    <footer className="bg-gray-800 border-t border-gray-700 p-4 text-center text-gray-500 text-xs mt-auto">
+                        <p>Ally Ultimate Edition • {CREATOR.name} © 2026 • Local Storage Database • No Cloud Required</p>
+                    </footer>
                 </div>
             );
         }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(firebaseReady ? <AllyApp /> : <FirebaseSetup />);
+        root.render(<AllyApp />);
     </script>
 </body>
 </html>
